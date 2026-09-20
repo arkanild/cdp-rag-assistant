@@ -20,14 +20,12 @@ from dataclasses import dataclass, asdict
 from typing import List, Optional
 from bs4 import BeautifulSoup
 
-
-
 #logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Data model
-
+@dataclass
 class ScrapDocument:
     """
     Represents a single scraped documention page. 
@@ -51,10 +49,10 @@ class ScrapDocument:
 SOURCES = {
     "aep":[
         "https://experienceleague.adobe.com/docs/experience-platform/identity/home.html",
-        "https://experienceleague.adobe.com/docs/experience-platform/segmentation/home.html",
-        "https://experienceleague.adobe.com/docs/experience-platform/profile/home.html",
-        "https://experienceleague.adobe.com/docs/experience-platform/xdm/home.html",
-        "https://experienceleague.adobe.com/docs/experience-platform/data-governance/home.html",
+        "https://experienceleague.adobe.com/docs/experience-platform/segmentation/home.html", #has moved now. 
+        "https://experienceleague.adobe.com/docs/experience-platform/profile/home.html", # has moved now. 
+        "https://experienceleague.adobe.com/docs/experience-platform/xdm/home.html", #has moved now. 
+        "https://experienceleague.adobe.com/docs/experience-platform/data-governance/home.html", # has moved now. 
     ],
     "segment": [
         "https://segment.com/docs/getting-started/",
@@ -138,7 +136,7 @@ class CDPScrapper:
         
         #Get clean text preserving some structure
         lines = []
-        for element in main_content.final_all(
+        for element in main_content.find_all(
             ["h1", "h2", "h3", "h4", "p", "li", "code", "pre"]
         ):
             text = element.get_text(strip=True)
@@ -171,7 +169,8 @@ class CDPScrapper:
         for section, keywords in section_keywords.items():
             if any(kw in url_lower for kw in keywords):
                 return section
-            return "general"
+        
+        return "general"
         
     
     def scrape_url(
@@ -185,7 +184,7 @@ class CDPScrapper:
         """
         doc_id = self._make_doc_id(url)
 
-        #Skip if already scraped - idempotency
+        #Skip if already scraped -> idempotency
         if self._already_scraped(doc_id):
             logger.info(f"Skipping already scraped: {url}")
             return None
@@ -203,3 +202,95 @@ class CDPScrapper:
             #Extract last modified from headers if available
             last_modified = response.headers.get("last-modified")
             
+            #Extract content 
+            title, content = self._extract_content(url, response.text)
+
+            if not content or len(content)< 100:
+                logger.warning("Insufficient content extracted from : {url}")
+                return None
+            
+            doc = ScrapDocument(
+                doc_id = doc_id,
+                url =url,
+                title = title, 
+                source = source, 
+                section = self._infer_section(url),
+                #need to add content, else error throws that missing required positional argument 'content'
+                content = content, 
+                scraped_at = datetime.utcnow().isoformat(),
+                content_length = len(content),
+                last_modified = last_modified
+            )
+
+            #save to disk
+            output_path = self.output_dir / f"{doc_id}.json"
+            with open(output_path, "w", encoding="utf-8") as f:
+                json.dump(asdict(doc), f, indent=2, ensure_ascii=False)
+
+            logger.info(
+                f"Saved: {title[50]} | "
+                f"{len(content)} chars | "
+                f"section: {doc.section}"
+            )
+            return doc
+        except httpx.HTTPError as e:
+            logger.error(f"HTTP error scraping {url}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error scraping {url} : {e}")
+            return None
+        
+
+    def scrap_all(self)-> list[ScrapDocument]:
+        """
+        Scrape all configured sources.
+        Polite delay between requests. 
+        Returns list of successfully scraped documents.
+        """
+        documents = []
+        total_urls = sum(len(urls) for urls in SOURCES.items())
+
+        logger.info(f"starting scrapper for {total_urls} across {len(SOURCES)}")
+
+        for source, urls in SOURCES.items():
+            logger.info(f"Scrapping source {source} ({len(urls)} pages)")
+            for url in urls:
+                doc = self.scrape_url(url, source)
+                if doc:
+                    documents.append(doc)
+                #Polite delay to respect robots.txtß
+                time.sleep(self.delay_seconds)
+
+        logger.info(
+            f"Scrapping complete: "
+            f"{len(documents)} documents saved to {self.output_dir}"
+        )
+        return documents
+        
+
+    #Entry point 
+def main():
+    scraper = CDPScrapper(
+                output_dir = "data/raw",
+                delay_seconds = 2.0
+            )
+    documents = scraper.scrap_all()
+
+    #Summary report         
+    by_source = {}
+    by_section ={}
+        
+    for doc in documents:
+            by_source[doc.source] = by_source.get(doc.source, 0) + 1
+            by_section[doc.section] = by_section.get(doc.section,0) + 1
+
+    print("\n------Scrapping Summary----------")
+    print(f"Total documents: {len(documents)}")
+    print(f"By Source: {json.dumps(by_source, indent=2)}")
+    print(f"By Section: {json.dumps(by_section, indent=2)}")
+    print(f"Ouput directory: data/raw")
+    print("Next step: run chunker.py")
+    
+    
+if __name__ == "__main__":
+    main()
