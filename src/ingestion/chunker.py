@@ -8,7 +8,7 @@ Strategy: Small-to-big (aka Parent-child chunking)
 - child chunk used for embedding./retrieval (more precise)
 
 
-Alternative consideredL Fixed-size chunking
+Alternative considered: Fixed-size chunking
  - Rejected after experiementing : splits mis-sentence , losses heading context
  - would hurt retrieval precision on technical terminology. 
 
