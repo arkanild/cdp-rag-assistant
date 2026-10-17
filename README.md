@@ -20,7 +20,7 @@ By vectorizing and indexing specialized technical docs on **Segmentation, Unifie
 
 ### Architecture diagram
 ### Key design decisions
-##### Parent-child chunking - CDP documentations often constitute of sections and sub-sections, chunking them semantically might not garner the result that we are expecting. Experimentation and solution approaches captured in -.
+##### Parent-child chunking - CDP documentations often constitute of sections and sub-sections, chunking them semantically might not garner the result that we are expecting. Experimentation and solution approaches captured in - notebooks/chunking_exeriments.ipynb.
 ##### Hybrid search - semantic search only could return close to or similar meaning sections from the documentation, in the context of a CDP, this could dilute the meaning and semantic resulting in unwanted response. 
 ##### Semantic Cache - With respect to CDP documentation, a lot of queries tend to be repetitive and we can use it to create a semantic cache. This helps in both reducing multiple calls to the LLM, reducing cost and reduces the overall token as well. 
 ##### Eval results — RAGAS scores, latency numbers - To Do. 
